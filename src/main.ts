@@ -1,4 +1,4 @@
-var _ = require("lodash");
+import _ from "lodash";
 
 // define types
 type Coordinate = [number, number];
@@ -75,7 +75,7 @@ const defaultDelayInput = document.querySelector(
 ) as HTMLInputElement;
 const scoreDisplay = document.querySelector("#score") as HTMLElement;
 
-const defaultDelay: number = 50; // ms
+const defaultDelay: number = 400; // ms
 let minEnemyDist = 5;
 let noPlayers: number = 1;
 let noEnemies: number = 5;
@@ -84,7 +84,7 @@ let players: Players = [];
 let enemies: Enemies = [];
 let coins: Coins = [];
 let allEntities = [players, enemies, coins];
-let controlPlayerMap = {};
+let controlPlayerMap: Record<string, number> = {};
 let score = 0;
 let delay = defaultDelay;
 
@@ -160,7 +160,7 @@ function colorSquare(id: string, color: string) {
   square.classList.toggle(color);
 }
 
-function applyEntityColor<T extends GridEntity>(color, entities: T[]) {
+function applyEntityColor<T extends GridEntity>(color: string, entities: T[]) {
   for (const entity of entities) {
     const entityId = coordToId([entity.x, entity.y]);
     colorSquare(entityId, color);
@@ -237,7 +237,7 @@ function initEntities() {
     });
 
     return acc;
-  }, {});
+  }, {} as Record<string, number>);
 
   coins = generateEntities(noCoins, [collisionPred], allEntities);
 
@@ -302,7 +302,7 @@ function movePlayers(players: Players) {
     if (moveKey === null) {
       continue;
     }
-    const moveDirection = _.invert(Object(player.controls.movement))[moveKey];
+    const moveDirection = _.invert(Object(player.controls.movement))[moveKey] as Directions;
 
     const moveFunc = directionActions[moveDirection];
     moveFunc(player);
