@@ -65,8 +65,17 @@ function updateInput(element: HTMLInputElement, gameParam: Number) {
 }
 
 // set config & state
-const rows: number = 20;
-const columns: number = rows;
+const defaultGameParams = {
+  loopDelay: 300, // ms
+  rows: 20,
+  columns: 20,
+  numPlayers: 1,
+  numEnemies: 5,
+  numCoins: 2
+}
+
+const gameParams = _.cloneDeep(defaultGameParams);
+
 const grid = document.querySelector("#game-grid") as HTMLElement;
 const noPlayersInput = document.querySelector("#noPlayers") as HTMLInputElement;
 const noEnemiesInput = document.querySelector("#noEnemies") as HTMLInputElement;
@@ -75,22 +84,31 @@ const defaultDelayInput = document.querySelector(
 ) as HTMLInputElement;
 const scoreDisplay = document.querySelector("#score") as HTMLElement;
 
-const defaultDelay: number = 400; // ms
-let minEnemyDist = 5;
-let noPlayers: number = 1;
-let noEnemies: number = 5;
-let noCoins: number = 2;
-let players: Players = [];
-let enemies: Enemies = [];
-let coins: Coins = [];
-let allEntities = [players, enemies, coins];
-let controlPlayerMap: Record<string, number> = {};
-let score = 0;
-let delay = defaultDelay;
+type GameState = {
+  players: Player[],
+  enemies: Enemy[],
+  coins: Coin[],
+  allEntities: [Player[], Enemy[], Coin[]],
+  controlPlayerMap: Record<string, number>,
+  score: number
+}
 
-setDefaultInputs(noPlayersInput, noPlayers);
-setDefaultInputs(noEnemiesInput, noEnemies);
-setDefaultInputs(defaultDelayInput, defaultDelay);
+const players: Players = [];
+const enemies: Enemies = [];
+const coins: Coins = [];
+
+const gameState = {
+  players,
+  enemies,
+  coins,
+  allEntities: [players, enemies, coins],
+  controlPlayerMap: {},
+  score: 0
+}
+
+setDefaultInputs(noPlayersInput, "numPlayers");
+setDefaultInputs(noEnemiesInput, "numEnemies");
+setDefaultInputs(defaultDelayInput, "loopDelay");
 
 updateInput(noPlayersInput, noPlayers);
 updateInput(noEnemiesInput, noEnemies);
@@ -310,33 +328,71 @@ function movePlayers(players: Players) {
   }
 }
 
-function vec2Add([x1, y1]: Coordinate, [x2, y2]: Coordinate): Coordinate {
+function vecAdd2([x1, y1]: Coordinate, [x2, y2]: Coordinate): Coordinate {
   return [x1 + x2, y1 + y2];
 }
 
-function vec2Sub([x1, y1]: Coordinate, [x2, y2]: Coordinate): Coordinate {
+function vecSub2([x1, y1]: Coordinate, [x2, y2]: Coordinate): Coordinate {
   return [x2 - x1, y2 - y1];
+}
+
+function vecSub2Torus([domX, domY]: [number, number], [x1, y1]: Coordinate, [x2, y2]: Coordinate): Coordinate {
+  let dx = x2 - x1;
+  let dy = y2 - y1;
+
+  console.log('vecSub2Torus direct dx,dy: ', dx, dy)
+
+  if(Math.abs(dx) > 0.5*domX){
+    dx = domX - dx;
+  }
+
+  if(dy > 0.5*domY){
+    dy = domY - dy
+  }
+
+  console.log('vecSub2Torus compensated dx,dy: ', dx, dy)
+
+  
+  return [dx, dy];
 }
 
 function dist2([x1, y1]: Coordinate, [x2, y2]: Coordinate) {
   return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
 }
 
+function dist2Torus([domX, domY]: [number, number], [x1, y1]: Coordinate, [x2, y2]: Coordinate) {
+  let dx = Math.abs(x2 - x1);
+  let dy = Math.abs(y2 - y1);
+
+  if(dx > 0.5*domX){
+    dx = domX - dx;
+  }
+
+  if(dy > 0.5*domY){
+    dy = domY - dy
+  }
+
+  return Math.sqrt(dx ** 2 + dy ** 2);
+}
+
 function moveEnemies(enemies: Enemies, players: Players) {
   for (const enemy of enemies) {
     const playersSorted = [...players].sort((player1, player2) => {
       return (
-        dist2([player1.x, player1.y], [enemy.x, enemy.y]) -
-        dist2([player2.x, player2.y], [enemy.x, enemy.y])
+        dist2Torus([columns, rows],[player1.x, player1.y], [enemy.x, enemy.y]) -
+        dist2Torus([columns, rows], [player2.x, player2.y], [enemy.x, enemy.y])
       );
     });
 
     const nearestPlayer = playersSorted[0];
-    const diffVec = vec2Sub(
+    const diffVec = vecSub2Torus(
+      [columns, rows],
       [nearestPlayer.x, nearestPlayer.y],
       [enemy.x, enemy.y]
     );
 
+    // console.log(diffVec, '@: ', enemy.x, enemy.y)
+    
     const diffX = diffVec[0];
     const diffY = diffVec[1];
 
@@ -366,6 +422,11 @@ initGame();
 let gameOver = false;
 let gameStarted = false;
 
+function updateGameState() {
+  movePlayers(players);
+  moveEnemies(enemies, players);
+}
+
 function gameLoop() {
   if (!gameOver) {
     if (gameStarted) updateGameState();
@@ -373,11 +434,6 @@ function gameLoop() {
       window.requestAnimationFrame(gameLoop);
     }, delay);
   }
-}
-
-function updateGameState() {
-  movePlayers(players);
-  moveEnemies(enemies, players);
 }
 
 gameLoop();
