@@ -51,30 +51,49 @@ function mod(n: number, m: number) {
   return ((n % m) + m) % m;
 }
 
-function setDefaultInputs(element: HTMLInputElement, gameParam: Number) {
-  element.value = gameParam.toString();
-}
-
-function updateInput(element: HTMLInputElement, gameParam: Number) {
-  element.addEventListener("input", () => {
-    gameParam = Number(element.value);
-    console.log(gameParam);
-    initGame();
-    console.log(players, enemies, defaultDelay);
-  });
+function setDefaultInputs(
+  element: HTMLInputElement,
+  gameParam: keyof GameParams
+) {
+  element.value = gameParams[gameParam].toString();
 }
 
 // set config & state
-const defaultGameParams = {
-  loopDelay: 300, // ms
+type GameParams = {
+  delay: number;
+  rows: number;
+  columns: number;
+  noPlayers: number;
+  noEnemies: number;
+  noCoins: number;
+  minEnemyDist: number;
+};
+
+const defaultGameParams: GameParams = {
+  delay: 300, // ms
   rows: 20,
   columns: 20,
-  numPlayers: 1,
-  numEnemies: 5,
-  numCoins: 2
-}
+  noPlayers: 1,
+  noEnemies: 5,
+  noCoins: 2,
+  minEnemyDist: 2,
+};
 
 const gameParams = _.cloneDeep(defaultGameParams);
+
+function updateInput(element: HTMLInputElement, gameParam: keyof GameParams) {
+  element.addEventListener("input", () => {
+    gameParams[gameParam] = Number(element.value);
+    console.log(gameParams[gameParam]);
+    gameOver = false;
+    gameStarted = false;
+    initGame();
+    setTimeout(() => {
+      gameLoop();
+    }, gameParams.delay);
+    console.log(gameState.players, gameState.enemies, gameParams.delay);
+  });
+}
 
 const grid = document.querySelector("#game-grid") as HTMLElement;
 const noPlayersInput = document.querySelector("#noPlayers") as HTMLInputElement;
@@ -85,34 +104,36 @@ const defaultDelayInput = document.querySelector(
 const scoreDisplay = document.querySelector("#score") as HTMLElement;
 
 type GameState = {
-  players: Player[],
-  enemies: Enemy[],
-  coins: Coin[],
-  allEntities: [Player[], Enemy[], Coin[]],
-  controlPlayerMap: Record<string, number>,
-  score: number
-}
+  players: Player[];
+  enemies: Enemy[];
+  coins: Coin[];
+  allEntities: [Player[], Enemy[], Coin[]];
+  controlPlayerMap: Record<string, number>;
+  score: number;
+  delay: number;
+};
 
 const players: Players = [];
 const enemies: Enemies = [];
 const coins: Coins = [];
 
-const gameState = {
+const gameState: GameState = {
   players,
   enemies,
   coins,
   allEntities: [players, enemies, coins],
   controlPlayerMap: {},
-  score: 0
-}
+  score: 0,
+  delay: 300,
+};
 
-setDefaultInputs(noPlayersInput, "numPlayers");
-setDefaultInputs(noEnemiesInput, "numEnemies");
-setDefaultInputs(defaultDelayInput, "loopDelay");
+setDefaultInputs(noPlayersInput, "noPlayers");
+setDefaultInputs(noEnemiesInput, "noEnemies");
+setDefaultInputs(defaultDelayInput, "delay");
 
-updateInput(noPlayersInput, noPlayers);
-updateInput(noEnemiesInput, noEnemies);
-updateInput(defaultDelayInput, defaultDelay);
+updateInput(noPlayersInput, "noPlayers");
+updateInput(noEnemiesInput, "noEnemies");
+updateInput(defaultDelayInput, "delay");
 
 const playerColor: string = "bg-red-500";
 const enemyColor: string = "bg-blue-500";
@@ -120,8 +141,8 @@ const coinColor: string = "bg-yellow-500";
 const bgColor: string = "bg-zinc-300";
 
 function setGrid() {
-  for (let y = 0; y < columns; y++) {
-    for (let x = 0; x < rows; x++) {
+  for (let y = 0; y < gameParams.columns; y++) {
+    for (let x = 0; x < gameParams.rows; x++) {
       const gridSquare: HTMLElement = document.createElement("div");
       gridSquare.id = coordToId([x, y]);
       gridSquare.classList.add(
@@ -142,7 +163,10 @@ function collisionPred<T extends GridEntity>(entity1: T, entity2: T) {
 
 function minDistPred<T extends GridEntity>(entity1: T, entity2: T) {
   // console.log("mindDist pred: ", entity1, entity2);
-  return dist2([entity1.x, entity1.y], [entity2.x, entity2.y]) >= minEnemyDist;
+  return (
+    dist2([entity1.x, entity1.y], [entity2.x, entity2.y]) >=
+    gameParams.minEnemyDist
+  );
 }
 
 function generateEntities<T extends GridEntity>(
@@ -158,7 +182,7 @@ function generateEntities<T extends GridEntity>(
   }
 
   while (newEntities.length < quantity) {
-    const [x, y] = randomCoordinate(rows, columns);
+    const [x, y] = randomCoordinate(gameParams.rows, gameParams.columns);
     const entity = { x, y } as T;
 
     let flag = true;
@@ -189,25 +213,25 @@ function applyEntityColor<T extends GridEntity>(color: string, entities: T[]) {
 const directionActions = {
   left: (player: Player) => {
     applyEntityColor(playerColor, [player]);
-    player.x = mod(player.x - 1, columns);
+    player.x = mod(player.x - 1, gameParams.columns);
     checkIfScored();
     applyEntityColor(playerColor, [player]);
   },
   right: (player: Player) => {
     applyEntityColor(playerColor, [player]);
-    player.x = mod(player.x + 1, columns);
+    player.x = mod(player.x + 1, gameParams.columns);
     checkIfScored();
     applyEntityColor(playerColor, [player]);
   },
   up: (player: Player) => {
     applyEntityColor(playerColor, [player]);
-    player.y = mod(player.y - 1, rows);
+    player.y = mod(player.y - 1, gameParams.rows);
     checkIfScored();
     applyEntityColor(playerColor, [player]);
   },
   down: (player: Player) => {
     applyEntityColor(playerColor, [player]);
-    player.y = mod(player.y + 1, rows);
+    player.y = mod(player.y + 1, gameParams.rows);
     checkIfScored();
     applyEntityColor(playerColor, [player]);
   },
@@ -231,17 +255,21 @@ const player2Default = {
 const playerDefaults = [player1Default, player2Default];
 
 function initEntities() {
-  players = [];
-  coins = [];
-  enemies = [];
-  allEntities = [players, coins, enemies];
+  gameState.players = [];
+  gameState.coins = [];
+  gameState.enemies = [];
+  gameState.allEntities = [
+    gameState.players,
+    gameState.coins,
+    gameState.enemies,
+  ];
 
   const playerLocations = generateEntities(
-    noPlayers,
+    gameParams.noPlayers,
     [collisionPred],
-    allEntities
+    gameState.allEntities
   ) as Players;
-  players = playerLocations.map((player, i) => {
+  gameState.players = playerLocations.map((player, i) => {
     player.controls = {
       lastKeyPressed: null,
       movement: playerDefaults[i],
@@ -249,7 +277,7 @@ function initEntities() {
     return player;
   });
 
-  controlPlayerMap = players.reduce((acc, player, ind) => {
+  gameState.controlPlayerMap = gameState.players.reduce((acc, player, ind) => {
     Object.values(player.controls.movement).forEach((key) => {
       acc[key] = ind;
     });
@@ -257,26 +285,30 @@ function initEntities() {
     return acc;
   }, {} as Record<string, number>);
 
-  coins = generateEntities(noCoins, [collisionPred], allEntities);
-
-  enemies = generateEntities(
-    noEnemies,
-    [collisionPred, minDistPred],
-    allEntities
+  gameState.coins = generateEntities(
+    gameParams.noCoins,
+    [collisionPred],
+    gameState.allEntities
   );
 
-  applyEntityColor(playerColor, players);
-  applyEntityColor(enemyColor, enemies);
-  applyEntityColor(coinColor, coins);
+  gameState.enemies = generateEntities(
+    gameParams.noEnemies,
+    [collisionPred, minDistPred],
+    gameState.allEntities
+  );
+
+  applyEntityColor(playerColor, gameState.players);
+  applyEntityColor(enemyColor, gameState.enemies);
+  applyEntityColor(coinColor, gameState.coins);
 }
 
 // init the score
 function displayScore() {
-  scoreDisplay.innerText = String(score);
+  scoreDisplay.innerText = String(gameState.score);
 }
 
 function initGame() {
-  score = 0;
+  gameState.score = 0;
   displayScore();
   removeChildren(grid);
   setGrid();
@@ -285,16 +317,20 @@ function initGame() {
 
 function checkIfScored() {
   for (const player of players) {
-    for (const [index, coin] of coins.entries()) {
+    for (const [index, coin] of gameState.coins.entries()) {
       if (collisionPred(player, coin)) {
         applyEntityColor(coinColor, [coin]);
         // remove the coin
-        coins.splice(index, 1);
+        gameState.coins.splice(index, 1);
         // add new coin
-        const newCoins = generateEntities(1, [collisionPred], allEntities);
-        coins.push(...newCoins);
+        const newCoins = generateEntities(
+          1,
+          [collisionPred],
+          gameState.allEntities
+        );
+        gameState.coins.push(...newCoins);
         applyEntityColor(coinColor, newCoins);
-        score++;
+        gameState.score++;
         displayScore();
       }
     }
@@ -302,13 +338,11 @@ function checkIfScored() {
 }
 
 // register the last key pressed during the animation frame
-let lastKeyPressed: string | null = null;
-
 document.addEventListener("keydown", (event) => {
-  const playerIndex = controlPlayerMap[event.key];
+  const playerIndex = gameState.controlPlayerMap[event.key];
   gameStarted = true;
   if (typeof playerIndex == "number") {
-    const player = players[playerIndex];
+    const player = gameState.players[playerIndex];
     player.controls.lastKeyPressed = event.key;
   }
 });
@@ -320,7 +354,9 @@ function movePlayers(players: Players) {
     if (moveKey === null) {
       continue;
     }
-    const moveDirection = _.invert(Object(player.controls.movement))[moveKey] as Directions;
+    const moveDirection = _.invert(Object(player.controls.movement))[
+      moveKey
+    ] as Directions;
 
     const moveFunc = directionActions[moveDirection];
     moveFunc(player);
@@ -336,23 +372,26 @@ function vecSub2([x1, y1]: Coordinate, [x2, y2]: Coordinate): Coordinate {
   return [x2 - x1, y2 - y1];
 }
 
-function vecSub2Torus([domX, domY]: [number, number], [x1, y1]: Coordinate, [x2, y2]: Coordinate): Coordinate {
+function vecSub2Torus(
+  [domX, domY]: [number, number],
+  [x1, y1]: Coordinate,
+  [x2, y2]: Coordinate
+): Coordinate {
   let dx = x2 - x1;
   let dy = y2 - y1;
 
-  console.log('vecSub2Torus direct dx,dy: ', dx, dy)
+  // console.log("vecSub2Torus direct dx,dy: ", dx, dy);
 
-  if(Math.abs(dx) > 0.5*domX){
+  if (Math.abs(dx) > 0.5 * domX) {
     dx = domX - dx;
   }
 
-  if(dy > 0.5*domY){
-    dy = domY - dy
+  if (dy > 0.5 * domY) {
+    dy = domY - dy;
   }
 
-  console.log('vecSub2Torus compensated dx,dy: ', dx, dy)
+  // console.log("vecSub2Torus compensated dx,dy: ", dx, dy);
 
-  
   return [dx, dy];
 }
 
@@ -360,16 +399,20 @@ function dist2([x1, y1]: Coordinate, [x2, y2]: Coordinate) {
   return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
 }
 
-function dist2Torus([domX, domY]: [number, number], [x1, y1]: Coordinate, [x2, y2]: Coordinate) {
+function dist2Torus(
+  [domX, domY]: [number, number],
+  [x1, y1]: Coordinate,
+  [x2, y2]: Coordinate
+) {
   let dx = Math.abs(x2 - x1);
   let dy = Math.abs(y2 - y1);
 
-  if(dx > 0.5*domX){
+  if (dx > 0.5 * domX) {
     dx = domX - dx;
   }
 
-  if(dy > 0.5*domY){
-    dy = domY - dy
+  if (dy > 0.5 * domY) {
+    dy = domY - dy;
   }
 
   return Math.sqrt(dx ** 2 + dy ** 2);
@@ -379,20 +422,28 @@ function moveEnemies(enemies: Enemies, players: Players) {
   for (const enemy of enemies) {
     const playersSorted = [...players].sort((player1, player2) => {
       return (
-        dist2Torus([columns, rows],[player1.x, player1.y], [enemy.x, enemy.y]) -
-        dist2Torus([columns, rows], [player2.x, player2.y], [enemy.x, enemy.y])
+        dist2Torus(
+          [gameParams.columns, gameParams.rows],
+          [player1.x, player1.y],
+          [enemy.x, enemy.y]
+        ) -
+        dist2Torus(
+          [gameParams.columns, gameParams.rows],
+          [player2.x, player2.y],
+          [enemy.x, enemy.y]
+        )
       );
     });
 
     const nearestPlayer = playersSorted[0];
     const diffVec = vecSub2Torus(
-      [columns, rows],
+      [gameParams.columns, gameParams.rows],
       [nearestPlayer.x, nearestPlayer.y],
       [enemy.x, enemy.y]
     );
 
     // console.log(diffVec, '@: ', enemy.x, enemy.y)
-    
+
     const diffX = diffVec[0];
     const diffY = diffVec[1];
 
@@ -402,14 +453,14 @@ function moveEnemies(enemies: Enemies, players: Players) {
       applyEntityColor(enemyColor, [enemy]);
       enemy.y = mod(
         enemy.y - Math.sign(diffY) * 1 * Math.round(Math.random()),
-        rows
+        gameParams.rows
       );
       applyEntityColor(enemyColor, [enemy]);
     } else {
       applyEntityColor(enemyColor, [enemy]);
       enemy.x = mod(
         enemy.x - Math.sign(diffX) * 1 * Math.round(Math.random()),
-        columns
+        gameParams.columns
       );
       applyEntityColor(enemyColor, [enemy]);
     }
@@ -423,8 +474,8 @@ let gameOver = false;
 let gameStarted = false;
 
 function updateGameState() {
-  movePlayers(players);
-  moveEnemies(enemies, players);
+  movePlayers(gameState.players);
+  moveEnemies(gameState.enemies, gameState.players);
 }
 
 function gameLoop() {
@@ -432,7 +483,7 @@ function gameLoop() {
     if (gameStarted) updateGameState();
     setTimeout(() => {
       window.requestAnimationFrame(gameLoop);
-    }, delay);
+    }, gameParams.delay);
   }
 }
 
